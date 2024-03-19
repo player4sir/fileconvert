@@ -1,55 +1,87 @@
-from flask import Flask, request, send_file, jsonify
-from werkzeug.utils import secure_filename
+from flask import Flask, request, jsonify, url_for, send_file
 from pdf2docx import Converter
 import os
-import tempfile
-import time
-import secrets
+import logging
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(16)
-ALLOWED_EXTENSIONS = {'pdf'}
+
+# Use environment variable for upload folder
+UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "uploads")
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {"pdf"}
+
+# Configure logging
+logging.basicConfig(filename="app.log", level=logging.INFO)
+
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """Checks if file extension is allowed"""
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route("/convert", methods=["POST"])
-def convert():
+
+@app.route("/ptw", methods=["POST"])
+def convert_pdf_to_word():
+    """API endpoint to convert PDF to Word document"""
+
+    # Check if file is uploaded
     if "file" not in request.files:
-        return jsonify({"error": "请上传文件"}), 400
+        logging.warning("No PDF file uploaded")
+        return jsonify({"error": "未上传 PDF 文件"}), 400
 
-    file = request.files["file"]
+    # Get uploaded file
+    pdf_file = request.files["file"]
 
-    if file.filename == "":
-        return jsonify({"error": "请选择文件"}), 400
+    # Check file extension
+    if not allowed_file(pdf_file.filename):
+        logging.warning("Unsupported file type uploaded")
+        return jsonify({"error": "不支持的文件类型"}), 400
 
-    if not allowed_file(file.filename):
-        return jsonify({"error": "文件类型不允许，仅支持PDF文件"}), 400
-
-    MAX_FILESIZE = 10 * 1024 * 1024  # 10MB
-    if file.content_length > MAX_FILESIZE:
-        return jsonify({"error": "文件大小超过最大限制 (10MB)"}), 400
+    # Save file to local storage
+    filename = pdf_file.filename
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    pdf_file.save(filepath)
 
     try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            filename = secure_filename(file.filename)
-            filename = f"{filename}_{secrets.token_hex(8)}"  
-            temp_file_path = os.path.join(temp_dir, filename)
-            file.save(temp_file_path)
+        # Convert PDF to Word
+        converter = Converter(filepath)
+        docx_filepath = os.path.splitext(filepath)[0] + ".docx"
+        converter.convert(docx_filepath)
 
-            output_path = os.path.join(temp_dir, "converted.docx")
-            cv = Converter(temp_file_path)
-            start_time = time.time()
-            cv.convert(output_path, start=0, end=None)
-            cv.close()
-            end_time = time.time()
+        # Generate download URL
+        download_url = url_for("download_file", filename=os.path.basename(docx_filepath))
 
-            if not os.path.exists(output_path):
-                return jsonify({"error": "转换失败"}), 500
+        logging.info(f"Successfully converted {filename} to {docx_filepath}")
+        return jsonify({"download_url": download_url})
 
-            return send_file(output_path, as_attachment=True)
     except Exception as e:
-        return jsonify({"error": "转换失败"}), 500
+        logging.error(f"Conversion failed: {str(e)}")
+        return jsonify({"error": f"转换失败：{str(e)}"}), 500
+
+    finally:
+        # Close converter
+        converter.close()
+
+        # You can choose to keep the uploaded file for logging or debugging
+        # and implement a separate process to clean up old files.
+        os.remove(filepath)
+
+
+# New route for downloading the converted file
+@app.route("/download/<filename>")
+def download_file(filename):
+    """Downloads the converted Word document"""
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    if os.path.exists(filepath):
+        return send_file(filepath, as_attachment=True)
+    else:
+        logging.error(f"File not found: {filename}")
+        return jsonify({"error": "文件未找到"}), 404
+
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    # Create upload folder if it doesn't exist
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+
+    app.run(host='0.0.0.0',port=5000,debug=False)
