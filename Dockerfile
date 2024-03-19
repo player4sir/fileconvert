@@ -8,16 +8,6 @@ COPY . /app
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create upload folder and set permissions (optional if using volume mount)
-RUN mkdir -p /app/uploads
-RUN chmod 755 /app/uploads
-
-# Define volume mount for persistent storage (optional)
-VOLUME /app/uploads
-
-# Set environment variable for upload folder
-ENV UPLOAD_FOLDER=/app/uploads
-
 # Expose port
 EXPOSE 5000
 
