@@ -6,7 +6,7 @@ import logging
 app = Flask(__name__)
 
 # Use environment variable for upload folder
-UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER")
+UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/app/uploads")
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {"pdf"}
