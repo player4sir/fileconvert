@@ -86,4 +86,4 @@ def get_upload_info(file_name):
     return res['url'], res['authorization'], res['token'], res['cos_file_id']
 
 if __name__ == '__main__':
-    app.run(debug=True)
+   app.run(host='0.0.0.0',port=5000,debug=False)
