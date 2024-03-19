@@ -26,7 +26,7 @@ def convert_pdf_to_word():
     
     # 返回Word文档
     word_temp.seek(0)
-    return send_file(word_temp.name, as_attachment=True, attachment_filename='converted.docx')
+    return send_file(word_temp.name, as_attachment=True, download_name='converted.docx')
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
