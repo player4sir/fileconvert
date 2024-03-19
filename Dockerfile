@@ -1,20 +1,28 @@
-# 使用 Python 官方的 slim 镜像作为基础镜像
-FROM python:3.9-slim
+FROM tiangolo/uwsgi-nginx-flask:python3.8
 
-# 设置工作目录
 WORKDIR /app
 
-# 将当前目录下的所有文件复制到容器的 /app 目录中
+# Copy application files
 COPY . /app
 
-# 安装依赖
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 暴露端口号（如果你的 Flask 应用监听了其他端口，请修改此处）
+# Create upload folder and set permissions (optional if using volume mount)
+RUN mkdir -p /app/uploads
+RUN chmod 755 /app/uploads
+
+# Define volume mount for persistent storage (optional)
+VOLUME /app/uploads
+
+# Set environment variable for upload folder
+ENV UPLOAD_FOLDER=/app/uploads
+
+# Expose port
 EXPOSE 5000
 
-# 设置环境变量
+# Set environment variable for Flask app
 ENV FLASK_APP=app.py
 
-# 启动 Flask 应用
+# Start Flask app
 CMD ["flask", "run", "--host=0.0.0.0"]
