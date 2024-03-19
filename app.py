@@ -13,7 +13,7 @@ ENV_ID = 'prod-8gl0hz7v942c14d3'
 def pdf_to_word():
     # 获取 PDF 文件链接
     pdf_url = request.form.get('pdf_url')
-
+    print(pdf_url)
     # 下载 PDF 文件
     try:
         pdf_data = download_file(pdf_url)
