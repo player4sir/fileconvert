@@ -1,87 +1,89 @@
-from flask import Flask, request, jsonify, url_for, send_file
+from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
 from pdf2docx import Converter
-import os
-import logging
+import requests
+import json
 
 app = Flask(__name__)
 
-# Use environment variable for upload folder
-UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/app/uploads")
+# 微信云托管环境 ID
+ENV_ID = 'prod-8gl0hz7v942c14d3'
 
-# Allowed file extensions
-ALLOWED_EXTENSIONS = {"pdf"}
+@app.route('/pdf_to_word', methods=['POST'])
+def pdf_to_word():
+    # 获取 PDF 文件链接
+    pdf_url = request.form.get('pdf_url')
 
-# Configure logging
-logging.basicConfig(filename="app.log", level=logging.INFO)
-
-
-def allowed_file(filename):
-    """Checks if file extension is allowed"""
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-@app.route("/ptw", methods=["POST"])
-def convert_pdf_to_word():
-    """API endpoint to convert PDF to Word document"""
-
-    # Check if file is uploaded
-    if "file" not in request.files:
-        logging.warning("No PDF file uploaded")
-        return jsonify({"error": "未上传 PDF 文件"}), 400
-
-    # Get uploaded file
-    pdf_file = request.files["file"]
-
-    # Check file extension
-    if not allowed_file(pdf_file.filename):
-        logging.warning("Unsupported file type uploaded")
-        return jsonify({"error": "不支持的文件类型"}), 400
-
-    # Save file to local storage
-    filename = pdf_file.filename
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    pdf_file.save(filepath)
-
+    # 下载 PDF 文件
     try:
-        # Convert PDF to Word
-        converter = Converter(filepath)
-        docx_filepath = os.path.splitext(filepath)[0] + ".docx"
-        converter.convert(docx_filepath)
-
-        # Generate download URL
-        download_url = url_for("download_file", filename=os.path.basename(docx_filepath))
-
-        logging.info(f"Successfully converted {filename} to {docx_filepath}")
-        return jsonify({"download_url": download_url})
-
+        pdf_data = download_file(pdf_url)
     except Exception as e:
-        logging.error(f"Conversion failed: {str(e)}")
-        return jsonify({"error": f"转换失败：{str(e)}"}), 500
+        return jsonify({'error': f'下载 PDF 文件失败: {e}'}), 500
 
-    finally:
-        # Close converter
-        converter.close()
+    # 将 PDF 转换为 Word
+    try:
+        cv = Converter(pdf_data)
+        docx_data = cv.convert()
+        cv.close()
+    except Exception as e:
+        return jsonify({'error': f'转换 PDF 文件失败: {e}'}), 500
 
-        # You can choose to keep the uploaded file for logging or debugging
-        # and implement a separate process to clean up old files.
-        os.remove(filepath)
+    # 上传 Word 文件到云托管存储
+    try:
+        word_url = upload_file(docx_data, 'word-file.docx')
+    except Exception as e:
+        return jsonify({'error': f'上传 Word 文件失败: {e}'}), 500
 
+    # 返回 Word 文件链接
+    return jsonify({'word_url': word_url})
 
-# New route for downloading the converted file
-@app.route("/download/<filename>")
-def download_file(filename):
-    """Downloads the converted Word document"""
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    if os.path.exists(filepath):
-        return send_file(filepath, as_attachment=True)
-    else:
-        logging.error(f"File not found: {filename}")
-        return jsonify({"error": "文件未找到"}), 404
+def download_file(url):
+    response = requests.get(url)
+    response.raise_for_status()  # 如果下载失败，则抛出异常
+    return response.content
 
+def upload_file(data, file_name):
+    # 获取上传链接和签名
+    upload_url, signature, security_token, file_id = get_upload_info(file_name)
 
-if __name__ == "__main__":
-    # Create upload folder if it doesn't exist
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
+    # 构造请求数据
+    files = {
+        'key': (None, file_name),
+        'Signature': (None, signature),
+        'x-cos-security-token': (None, security_token),
+        'x-cos-meta-fileid': (None, file_id),
+        'file': (file_name, data)
+    }
 
-    app.run(host='0.0.0.0',port=5000,debug=False)
+    # 发送 POST 请求
+    response = requests.post(upload_url, files=files)
+
+    # 检查响应状态码
+    if response.status_code != 200:
+        raise Exception(f'上传文件失败: {response.text}')
+
+    # 返回文件链接
+    return upload_url + '/' + file_name
+
+def get_upload_info(file_name):
+    # 构造请求数据
+    data = {
+        'env': ENV_ID,
+        'path': file_name
+    }
+
+    # 发送 POST 请求
+    response = requests.post('http://api.weixin.qq.com/tcb/uploadfile', json=data)
+
+    # 检查响应状态码
+    if response.status_code != 200:
+        raise Exception(f'获取上传信息失败: {response.text}')
+
+    # 解析响应数据
+    res = json.loads(response.text)
+
+    # 返回上传链接、签名、安全令牌和文件 ID
+    return res['url'], res['authorization'], res['token'], res['cos_file_id']
+
+if __name__ == '__main__':
+    app.run(debug=True)
