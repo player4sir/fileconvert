@@ -1,3 +1,7 @@
-pdf2docx
-flask
+Flask==2.2.3
+pdf2docx==0.5.8
+pdfplumber==0.11.0
+Pillow==10.2.0
+python_pptx==0.6.23
+Requests==2.31.0
 Werkzeug
