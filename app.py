@@ -8,12 +8,13 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 from io import BytesIO
 from PIL import Image
-
+import img2pdf
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
 # pdf转换为word
-@app.route('/convert_to_word', methods=['POST'])
+@app.route('/pdf_to_word', methods=['POST'])
 def convert_pdf_to_word():
     # 假设前端通过表单上传了PDF文件
     pdf_file = request.files['pdf']
@@ -36,7 +37,47 @@ def convert_pdf_to_word():
     word_temp.seek(0)
     return send_file(word_temp.name, as_attachment=True, download_name='converted.docx')
 
-@app.route('/convert_to_pptx', methods=['POST'])
+@app.route('/image_to_pdf', methods=['POST'])
+def convert_images_to_pdf():
+    # 允许的图片文件扩展名
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+
+    def allowed_file(filename):
+        """检查文件扩展名是否允许"""
+        return '.' in filename and \
+               filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+    # 检查是否有文件被上传
+    if 'images' not in request.files:
+        return "没有文件部分", 400
+    files = request.files.getlist('images')
+    image_paths = []
+    for file in files:
+        if file and allowed_file(file.filename):
+            # 保存图片到临时文件
+            filename = secure_filename(file.filename)
+            temp_file = tempfile.NamedTemporaryFile(delete=False)
+            file.save(temp_file.name)
+            image_paths.append(temp_file.name)
+        else:
+            return "文件类型不允许", 400
+    
+    # 创建临时文件保存PDF文档
+    pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    
+    # 使用img2pdf库将所有图片合并为一个PDF
+    with open(pdf_temp.name, "wb") as f:
+        f.write(img2pdf.convert(image_paths))
+    
+    # 删除临时的图片文件
+    for path in image_paths:
+        os.unlink(path)
+    
+    # 返回PDF文档
+    pdf_temp.seek(0)
+    return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
+
+@app.route('/pdf_to_pptx', methods=['POST'])
 def convert_pdf_to_pptx():
     # 假设前端通过表单上传了PDF文件
     pdf_file = request.files['pdf']
