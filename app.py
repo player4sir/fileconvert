@@ -89,12 +89,13 @@ def convert_pdf_to_pptx():
     pdf_temp = tempfile.NamedTemporaryFile(delete=False)
     pdf_file.save(pdf_temp.name)
     
+    pptx_temp = None  # 初始化pptx_temp变量
     try:
         # 创建PPT对象
         ppt = Presentation()
         
         # 使用pdfplumber打开PDF文件
-        with open_pdf(pdf_temp.name) as pdf:
+        with pdfplumber.open(pdf_temp.name) as pdf:
             # 遍历PDF中的每一页
             for page in pdf.pages:
                 # 检查页面是否包含文本
@@ -150,7 +151,8 @@ def convert_pdf_to_pptx():
     finally:
         # 删除临时的PDF和PPTX文件
         os.unlink(pdf_temp.name)
-        os.unlink(pptx_temp.name)
+        if pptx_temp:  # 检查pptx_temp是否已初始化
+            os.unlink(pptx_temp.name)
 
 @app.route("/pdf_to_excel", methods=["POST"])
 def pdf_to_excel():
