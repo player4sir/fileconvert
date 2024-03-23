@@ -10,6 +10,10 @@ from io import BytesIO
 from PIL import Image
 import img2pdf
 from werkzeug.utils import secure_filename
+import openpyxl
+from img2table.document import Image as Img
+from img2table.ocr import TesseractOCR
+
 
 app = Flask(__name__)
 
