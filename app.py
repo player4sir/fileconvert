@@ -193,6 +193,44 @@ def pdf_to_excel():
         os.unlink(pdf_temp.name)
         os.unlink(excel_temp.name)
 
+@app.route('/image_to_xlsx', methods=['POST'])
+def convert_image_to_xlsx():
+    if 'image' not in request.files:
+        return jsonify({'error': '没有文件上传'}), 400
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': '没有选择文件'}), 400
+
+    # 创建临时文件保存图像
+    image_temp = tempfile.NamedTemporaryFile(delete=False)
+    file.save(image_temp.name)
+    try:
+        # 使用OpenCV读取图像
+        img = cv2.imread(image_temp.name)
+        if img is None:
+            raise FileNotFoundError(f"无法加载图像: {image_temp.name}")
+        # 初始化Tesseract OCR
+        ocr = TesseractOCR(n_threads=1, lang="chi_sim+eng")  # 支持中文和英文
+        # 加载图像
+        image = Img(img, detect_rotation=False)
+        # 提取表格
+        tables = image.extract_tables(ocr=ocr)
+        # 创建临时文件保存Excel文件
+        excel_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', mode='w+b')
+        # 将表格转换为数据框并保存为Excel文件
+        with pd.ExcelWriter(excel_temp.name) as writer:
+            for i, table in enumerate(tables):
+                df = table.to_dataframe()
+                df.to_excel(writer, sheet_name=f'Table {i}', index=False)
+
+        # 返回Excel文件
+        excel_temp.seek(0)
+        return send_file(excel_temp.name, as_attachment=True, download_name='converted.xlsx')
+    finally:
+        # 删除临时的图像和Excel文件
+        os.unlink(image_temp.name)
+        os.unlink(excel_temp.name)
 
 
 if __name__ == '__main__':
