@@ -18,24 +18,26 @@ app = Flask(__name__)
 def convert_pdf_to_word():
     # 假设前端通过表单上传了PDF文件
     pdf_file = request.files['pdf']
-    # 创建临时文件保存PDF库库
+    # 创建临时文件保存PDF文件
     pdf_temp = tempfile.NamedTemporaryFile(delete=False)
     pdf_file.save(pdf_temp.name)
     
-    # 创建临时文件保存Word文档
-    word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
-    
-    # 使用pdf2docx库转换PDF为Word
-    cv = Converter(pdf_temp.name)
-    cv.convert(word_temp.name, start=0, end=None)
-    cv.close()
-    
-    # 删除临时的PDF文件
-    os.unlink(pdf_temp.name)
-    
-    # 返回Word文档
-    word_temp.seek(0)
-    return send_file(word_temp.name, as_attachment=True, download_name='converted.docx')
+    try:
+        # 创建临时文件保存Word文档
+        word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx', mode='w+b')
+        
+        # 使用pdf2docx库转换PDF为Word
+        cv = Converter(pdf_temp.name)
+        cv.convert(word_temp.name, start=0, end=None)
+        cv.close()
+        
+        # 返回Word文档
+        word_temp.seek(0)
+        return send_file(word_temp.name, as_attachment=True, download_name='converted.docx')
+    finally:
+        # 删除临时的PDF和Word文件
+        os.unlink(pdf_temp.name)
+        os.unlink(word_temp.name)
 
 @app.route('/image_to_pdf', methods=['POST'])
 def convert_images_to_pdf():
