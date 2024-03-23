@@ -6,3 +6,4 @@ python_pptx
 Requests
 img2pdf
 Werkzeug
+openpyxl
