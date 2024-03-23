@@ -146,7 +146,39 @@ def convert_pdf_to_pptx():
     pptx_temp.seek(0)
     return send_file(pptx_temp.name, as_attachment=True, download_name='converted.pptx')
 
+@app.route("/pdf_to_excel", methods=["POST"])
+def pdf_to_excel():
+    # 假设前端通过表单上传了PDF文件
+    pdf_file = request.files['pdf']
+    # 创建临时文件保存PDF文件
+    pdf_temp = tempfile.NamedTemporaryFile(delete=False)
+    pdf_file.save(pdf_temp.name)
     
+    # 创建临时文件保存Excel文档
+    excel_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+    
+    # 使用pdfplumber打开PDF文件
+    with pdfplumber.open(pdf_temp.name) as pdf:
+        # 创建Excel文件
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        # 遍历PDF文件中的所有页
+        for page in pdf.pages:
+            # 提取当前页的表格
+            table = page.extract_table()
+            # 检查页面是否包含表格数据
+            if table:
+                # 将表格数据写入Excel工作表
+                for row in table:
+                    ws.append(row)
+    
+    # 保存Excel文件到临时文件
+    wb.save(excel_temp.name)   
+    # 删除临时的PDF文件
+    os.unlink(pdf_temp.name)
+    # 返回Excel文档
+    excel_temp.seek(0)
+    return send_file(excel_temp.name, as_attachment=True, download_name='converted.xlsx')
 
 
 if __name__ == '__main__':
