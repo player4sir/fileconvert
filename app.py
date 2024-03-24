@@ -16,7 +16,7 @@ from img2table.ocr import TesseractOCR
 
 
 app = Flask(__name__)
-
+application = app
 # pdf转换为word
 @app.route('/pdf_to_word', methods=['POST'])
 def convert_pdf_to_word():
@@ -237,5 +237,5 @@ def convert_image_to_xlsx():
         os.unlink(excel_temp.name)
 
 
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
+# if __name__ == '__main__':
+#     app.run(debug=False, host='0.0.0.0', port=5000)
