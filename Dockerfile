@@ -42,8 +42,5 @@ ENV FLASK_APP=app.py
 # 安装opencv-python-headless
 RUN pip install opencv-python-headless
 
-# 启动uWSGI服务器来运行应用
-CMD ["uwsgi", "--socket", "0.0.0.0:5000", "--protocol=http", "--wsgi-file", "app.py", "--callable", "app"]
-
-
-
+# 使用Gunicorn代替uWSGI启动Flask应用
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
