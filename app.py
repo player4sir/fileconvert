@@ -16,7 +16,7 @@ from img2table.ocr import TesseractOCR
 
 
 app = Flask(__name__)
-application = app
+
 # pdf转换为word
 @app.route('/pdf_to_word', methods=['POST'])
 def convert_pdf_to_word():
