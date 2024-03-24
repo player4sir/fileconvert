@@ -25,6 +25,11 @@ COPY --from=builder /app /app
 # 设置工作目录
 WORKDIR /app
 
+# 安装必要的库
+RUN apt-get update && \
+    apt-get install -y libgl1-mesa-glx && \
+    rm -rf /var/lib/apt/lists/*
+
 # 复制应用文件
 COPY . /app
 
@@ -38,8 +43,7 @@ ENV FLASK_APP=app.py
 RUN pip install opencv-python-headless
 
 # 启动uWSGI服务器来运行应用
-CMD ["uwsgi", "--socket", "0.0.0.0:5000", "--protocol=http", "--module", "app:app"]
+CMD ["uwsgi", "--socket", "0.0.0.0:5000", "--protocol=http", "--wsgi-file", "app.py", "--callable", "app"]
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl --fail http://localhost:5000/ || exit 1
+
+
