@@ -7,7 +7,7 @@ WORKDIR /app
 
 # 安装Tesseract OCR及其依赖项
 RUN apt-get update && \
-    apt-get install -y tesseract-ocr libtesseract-dev && \
+    apt-get install -y tesseract-ocr libtesseract-dev libgl1-mesa-glx && \
     # 清理apt缓存以减小镜像大小
     rm -rf /var/lib/apt/lists/*
 
@@ -33,6 +33,9 @@ EXPOSE 5000
 
 # 设置Flask应用的环境变量
 ENV FLASK_APP=app.py
+
+# 安装opencv-python-headless
+RUN pip install opencv-python-headless
 
 # 启动uWSGI服务器来运行应用
 CMD ["uwsgi", "--socket", "0.0.0.0:5000", "--protocol=http", "--module", "app:app"]
