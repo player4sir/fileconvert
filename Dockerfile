@@ -25,9 +25,9 @@ COPY --from=builder /app /app
 # 设置工作目录
 WORKDIR /app
 
-# 安装必要的库
+# 安装必要的库和Tesseract
 RUN apt-get update && \
-    apt-get install -y libgl1-mesa-glx && \
+    apt-get install -y libgl1-mesa-glx tesseract-ocr && \
     rm -rf /var/lib/apt/lists/*
 
 # 复制应用文件
@@ -38,7 +38,7 @@ EXPOSE 5000
 
 # 设置Flask应用的环境变量
 ENV FLASK_APP=app.py
-
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
 # 安装opencv-python-headless
 RUN pip install opencv-python-headless
 
