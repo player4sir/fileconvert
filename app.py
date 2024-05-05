@@ -25,41 +25,49 @@ tessdata_prefix = os.environ.get('TESSDATA_PREFIX')
 @app.route('/pdf_to_word', methods=['POST'])
 def convert_pdf_to_word():
     # 假设前端通过表单上传了PDF文件
-    pdf_file = request.files['pdf']
+    pdf_file = request.files['pdf']  
     # 创建临时文件保存PDF文件
     pdf_temp = tempfile.NamedTemporaryFile(delete=False)
     pdf_file.save(pdf_temp.name)
-    
+    word_temp = None
+    cv = None
     try:
         # 创建临时文件保存Word文档
-        word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx', mode='w+b')
-        
+        word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx', mode='w+b')       
         # 使用pdf2docx库转换PDF为Word
         cv = Converter(pdf_temp.name)
-        cv.convert(word_temp.name, start=0, end=None)
-        cv.close()
-        
+        cv.convert(word_temp.name, start=0, end=None)    
         # 返回Word文档
         word_temp.seek(0)
         return send_file(word_temp.name, as_attachment=True, download_name='converted.docx')
+    except Exception as e:
+        print(f"转换失败: {e}")
+        # 可以在这里添加更多的错误处理逻辑
     finally:
         # 删除临时的PDF和Word文件
-        os.unlink(pdf_temp.name)
-        os.unlink(word_temp.name)
+        if cv:
+            cv.close()
+        if pdf_temp:
+            os.unlink(pdf_temp.name)
+        if word_temp:
+            os.unlink(word_temp.name)
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+
+def allowed_file(filename):
+    """检查文件扩展名是否允许"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/image_to_pdf', methods=['POST'])
 def convert_images_to_pdf():
-    # 允许的图片文件扩展名
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
-    def allowed_file(filename):
-        """检查文件扩展名是否允许"""
-        return '.' in filename and \
-               filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
     # 检查是否有文件被上传
     if 'images' not in request.files:
-        return "没有文件部分", 400
+        return "没有文件部分", 400  
+    # 获取用户设置的方向和边距
+    orientation = request.form.get('orientation', 'portrait')  # 默认为纵向
+    margin = request.form.get('margin', 8)  # 默认边距为0 
     files = request.files.getlist('images')
-    image_paths = []
+    image_paths = [] 
     for file in files:
         if file and allowed_file(file.filename):
             # 保存图片到临时文件
@@ -68,14 +76,15 @@ def convert_images_to_pdf():
             file.save(temp_file.name)
             image_paths.append(temp_file.name)
         else:
-            return "文件类型不允许", 400
+            return "文件类型不允许", 400 
     try:
         # 创建临时文件保存PDF文档
-        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')
-        
+        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')       
+        # 设置PDF的布局
+        layout_fun = img2pdf.get_layout_fun(pagesize=img2pdf.default_pagesize, orientation=orientation, margins=(margin, margin, margin, margin))      
         # 使用img2pdf库将所有图片合并为一个PDF
         with open(pdf_temp.name, "wb") as f:
-            f.write(img2pdf.convert(image_paths))     
+            f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))     
         # 返回PDF文档
         pdf_temp.seek(0)
         return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
@@ -204,22 +213,28 @@ def convert_image_to_xlsx():
     # 创建临时文件保存图像
     image_temp = tempfile.NamedTemporaryFile(delete=False)
     file.save(image_temp.name)
-    excel_temp = None  # 在 try 块之前初始化 excel_temp
+    excel_temp = None
+
     try:
         # 使用OpenCV读取图像
         img = cv2.imread(image_temp.name)
         if img is None:
             raise FileNotFoundError(f"无法加载图像: {image_temp.name}")
+
         # 初始化Tesseract OCR
         ocr = TesseractOCR(n_threads=1, lang="chi_sim+eng")  # 支持中文和英文
+
         # 加载图像
         image = Img(img, detect_rotation=False)
+
         # 提取表格
         tables = image.extract_tables(ocr=ocr)
-        if not tables:  # 如果没有提取到表格，提前退出函数
+        if not tables:
             return jsonify({'error': '图像中没有检测到表格'}), 400
+
         # 创建临时文件保存Excel文件
         excel_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', mode='w+b')
+
         # 将表格转换为数据框并保存为Excel文件
         with pd.ExcelWriter(excel_temp.name) as writer:
             for i, table in enumerate(tables):
@@ -229,16 +244,18 @@ def convert_image_to_xlsx():
         # 返回Excel文件
         excel_temp.seek(0)
         return send_file(excel_temp.name, as_attachment=True, download_name='converted.xlsx')
+
     except Exception as e:
-        # 处理异常
-        return jsonify({'error': str(e)}), 500
+        # 处理异常并记录日志
+        print(f"Error: {str(e)}")
+        return jsonify({'error': '发生错误，请稍后再试'}), 500
+
     finally:
         # 删除临时的图像文件
         os.unlink(image_temp.name)
         # 检查 excel_temp 是否已创建，如果是，则删除
         if excel_temp and os.path.exists(excel_temp.name):
             os.unlink(excel_temp.name)
-
 
 
 
