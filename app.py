@@ -81,8 +81,17 @@ def convert_images_to_pdf():
         # 创建临时文件保存PDF文档
         pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')
         
+        # 获取用户设置的页面方向和边距
+        orientation = request.form.get('orientation', 'portrait')  # 默认为纵向
+        margin = int(request.form.get('margin', 8))  # 默认边距为0
+        
         # 设置PDF的布局
-        layout_fun = img2pdf.get_layout_fun(pagesize=(595, 842), orientation="P", margins=(0, 0, 0, 0))
+        a4inpt = (img2pdf.mm_to_pt(210), img2pdf.mm_to_pt(297))  # A4大小，单位转换为点
+        layout_fun = img2pdf.get_layout_fun(pagesize=a4inpt)
+        
+        if orientation == 'landscape':
+            # 如果用户选择横向，交换页面尺寸的宽高
+            a4inpt = (a4inpt[1], a4inpt[0])
         
         # 使用img2pdf库将所有图片合并为一个PDF
         with open(pdf_temp.name, "wb") as f:
@@ -92,7 +101,7 @@ def convert_images_to_pdf():
         pdf_temp.seek(0)
         return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
     finally:
-        # 删除临时的图片文件
+        # 删除临时的图片文件和PDF文件
         for path in image_paths:
             os.unlink(path)
         os.unlink(pdf_temp.name)
