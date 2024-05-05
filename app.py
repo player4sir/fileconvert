@@ -62,12 +62,11 @@ def allowed_file(filename):
 def convert_images_to_pdf():
     # 检查是否有文件被上传
     if 'images' not in request.files:
-        return "没有文件部分", 400  
-    # 获取用户设置的方向和边距
-    orientation = request.form.get('orientation', 'portrait')  # 默认为纵向
-    margin = request.form.get('margin', 8)  # 默认边距为0 
+        return "没有文件部分", 400
+    
     files = request.files.getlist('images')
-    image_paths = [] 
+    image_paths = []
+    
     for file in files:
         if file and allowed_file(file.filename):
             # 保存图片到临时文件
@@ -76,20 +75,30 @@ def convert_images_to_pdf():
             file.save(temp_file.name)
             image_paths.append(temp_file.name)
         else:
-            return "文件类型不允许", 400 
+            return "文件类型不允许", 400
+    
     try:
         # 创建临时文件保存PDF文档
-        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')       
+        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')
+        
+        # 获取用户设置的页面方向
+        orientation = request.form.get('orientation', 'portrait')  # 默认为纵向
+        
         # 设置PDF的布局
-        layout_fun = img2pdf.get_layout_fun(pagesize=img2pdf.default_pagesize, orientation=orientation, margins=(margin, margin, margin, margin))      
+        if orientation == 'portrait':
+            layout_fun = img2pdf.get_layout_fun(pagesize=(595, 842), orientation="P", margins=(0, 0, 0, 0))
+        else:
+            layout_fun = img2pdf.get_layout_fun(pagesize=(842, 595), orientation="L", margins=(0, 0, 0, 0))
+        
         # 使用img2pdf库将所有图片合并为一个PDF
         with open(pdf_temp.name, "wb") as f:
-            f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))     
+            f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))
+        
         # 返回PDF文档
         pdf_temp.seek(0)
         return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
     finally:
-        # 删除临时的图片文件和PDF文件
+        # 删除临时的图片文件
         for path in image_paths:
             os.unlink(path)
         os.unlink(pdf_temp.name)
