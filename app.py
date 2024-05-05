@@ -81,14 +81,8 @@ def convert_images_to_pdf():
         # 创建临时文件保存PDF文档
         pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')
         
-        # 获取用户设置的页面方向
-        orientation = request.form.get('orientation', 'portrait')  # 默认为纵向
-        
         # 设置PDF的布局
-        if orientation == 'portrait':
-            layout_fun = img2pdf.get_layout_fun(pagesize=(595, 842), orientation="P", margins=(0, 0, 0, 0))
-        else:
-            layout_fun = img2pdf.get_layout_fun(pagesize=(842, 595), orientation="L", margins=(0, 0, 0, 0))
+        layout_fun = img2pdf.get_layout_fun(pagesize=(595, 842), orientation="P", margins=(0, 0, 0, 0))
         
         # 使用img2pdf库将所有图片合并为一个PDF
         with open(pdf_temp.name, "wb") as f:
