@@ -1,32 +1,20 @@
-# 第一阶段：构建阶段
-FROM python:3.8-slim-buster as builder
+# 使用官方 Python 运行时作为父镜像
+FROM python:3.8-slim
 
-# 设置工作目录
+# 设置工作目录为 /app
 WORKDIR /app
 
-# 将当前目录内容复制到容器的/app目录下
+# 将当前目录内容复制到位于 /app 中的容器中
 COPY . /app
 
-# 安装在requirements.txt中列出的Python依赖
+# 安装 requirements.txt 中指定的任何所需包
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 第二阶段：运行阶段
-FROM python:3.8-slim-buster
-
-# 设置工作目录
-WORKDIR /app
-
-# 从构建阶段复制构建产物到运行阶段
-COPY --from=builder /app/requirements.txt /app/requirements.txt
-COPY --from=builder /app/app.py /app/app.py
-COPY --from=builder /app/static /app/static
-COPY --from=builder /app/templates /app/templates
-
-# 安装在requirements.txt中列出的Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 暴露容器的5000端口
+# 使端口 5000 可供此容器外的环境使用
 EXPOSE 5000
 
-# 运行Flask应用
+# 定义环境变量
+# ENV NAME World
+
+# 在容器启动时运行 app.py
 CMD ["python", "app.py"]
