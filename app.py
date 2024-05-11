@@ -1,6 +1,7 @@
 
-from flask import Flask,request, send_file
+from flask import Flask,request, send_file，jsonify
 from pdf2docx import Converter
+from docx2pdf import convert
 import os
 import tempfile
 import img2pdf
@@ -30,8 +31,9 @@ def convert_pdf_to_word():
         word_temp.seek(0)
         return send_file(word_temp.name, as_attachment=True, download_name='converted.docx')
     except Exception as e:
-        print(f"转换失败: {e}")
-        # 可以在这里添加更多的错误处理逻辑
+         response_message = str(e)
+         app.logger.error(f"Conversion failed: {response_message}")
+         return jsonify({'error': response_message}), 500
     finally:
         # 删除临时的PDF和Word文件
         if cv:
@@ -89,7 +91,34 @@ def convert_images_to_pdf():
         for path in image_paths:
             os.unlink(path)
         os.unlink(pdf_temp.name)
-
+        
+@app.route('/word_to_pdf', methods=['POST'])
+def convert_word_to_pdf():
+    # Assume the front end uploads a Word file through a form
+    word_file = request.files['word']
+    # Create a temporary file to save the Word file
+    word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx', mode='w+b')
+    word_file.save(word_temp.name)
+    pdf_temp = None
+    
+    try:
+        # Create a temporary file to save the PDF document
+        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')
+        # Use docx2pdf to convert Word to PDF
+        convert(word_temp.name, pdf_temp.name)
+        # Return the PDF document
+        pdf_temp.seek(0)
+        return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
+    except Exception as e:
+        response_message = str(e)
+        app.logger.error(f"Conversion failed: {response_message}")
+        return jsonify({'error': response_message}), 500
+    finally:
+        # Delete the temporary Word and PDF files
+        if word_temp:
+            os.unlink(word_temp.name)
+        if pdf_temp:
+            os.unlink(pdf_temp.name)
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
