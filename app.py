@@ -1,10 +1,8 @@
-import cv2
-from flask import Flask, jsonify, request, send_file
-import pandas as pd
+
+from flask import Flask,request, send_file
 from pdf2docx import Converter
 import os
 import tempfile
-
 import pdfplumber
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -12,14 +10,10 @@ from io import BytesIO
 from PIL import Image
 import img2pdf
 from werkzeug.utils import secure_filename
-import openpyxl
-from img2table.document import Image as Img
-from img2table.ocr import TesseractOCR
 
 
 app = Flask(__name__)
 
-tessdata_prefix = os.environ.get('TESSDATA_PREFIX')
 
 # pdf转换为word
 @app.route('/pdf_to_word', methods=['POST'])
@@ -79,24 +73,19 @@ def convert_images_to_pdf():
     
     try:
         # 创建临时文件保存PDF文档
-        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')
-        
+        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')    
         # 获取用户设置的页面方向和边距
         orientation = request.form.get('orientation', 'portrait')  # 默认为纵向
-        margin = int(request.form.get('margin', 8))  # 默认边距为0
-        
+        margin = int(request.form.get('margin', 8))  # 默认边距为0    
         # 设置PDF的布局
         a4inpt = (img2pdf.mm_to_pt(210), img2pdf.mm_to_pt(297))  # A4大小，单位转换为点
-        layout_fun = img2pdf.get_layout_fun(pagesize=a4inpt)
-        
+        layout_fun = img2pdf.get_layout_fun(pagesize=a4inpt)       
         if orientation == 'landscape':
             # 如果用户选择横向，交换页面尺寸的宽高
-            a4inpt = (a4inpt[1], a4inpt[0])
-        
+            a4inpt = (a4inpt[1], a4inpt[0])  
         # 使用img2pdf库将所有图片合并为一个PDF
         with open(pdf_temp.name, "wb") as f:
-            f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))
-        
+            f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))    
         # 返回PDF文档
         pdf_temp.seek(0)
         return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
@@ -173,102 +162,6 @@ def convert_pdf_to_pptx():
         os.unlink(pdf_temp.name)
         if pptx_temp:  # 检查pptx_temp是否已初始化
             os.unlink(pptx_temp.name)
-
-@app.route("/pdf_to_excel", methods=["POST"])
-def pdf_to_excel():
-    # 假设前端通过表单上传了PDF文件
-    pdf_file = request.files['pdf']
-    # 创建临时文件保存PDF文件
-    pdf_temp = tempfile.NamedTemporaryFile(delete=False)
-    pdf_file.save(pdf_temp.name)  
-    try:
-        # 创建临时文件保存Excel文档
-        excel_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', mode='w+b')
-        
-        # 使用pdfplumber打开PDF文件
-        with pdfplumber.open(pdf_temp.name) as pdf:
-            # 创建Excel文件
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            # 遍历PDF文件中的所有页
-            for page in pdf.pages:
-                # 提取当前页的表格
-                table = page.extract_table()
-                # 检查页面是否包含表格数据
-                if table:
-                    # 将表格数据写入Excel工作表
-                    for row in table:
-                        ws.append(row)
-        
-        # 保存Excel文件到临时文件
-        wb.save(excel_temp.name)
-        wb.close()
-        
-        # 返回Excel文档
-        excel_temp.seek(0)
-        return send_file(excel_temp.name, as_attachment=True, download_name='converted.xlsx')
-    finally:
-        # 删除临时的PDF和Excel文件
-        os.unlink(pdf_temp.name)
-        os.unlink(excel_temp.name)
-
-
-@app.route('/image_to_xlsx', methods=['POST'])
-def convert_image_to_xlsx():
-    if 'image' not in request.files:
-        return jsonify({'error': '没有文件上传'}), 400
-
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': '没有选择文件'}), 400
-
-    # 创建临时文件保存图像
-    image_temp = tempfile.NamedTemporaryFile(delete=False)
-    file.save(image_temp.name)
-    excel_temp = None
-
-    try:
-        # 使用OpenCV读取图像
-        img = cv2.imread(image_temp.name)
-        if img is None:
-            raise FileNotFoundError(f"无法加载图像: {image_temp.name}")
-
-        # 初始化Tesseract OCR
-        ocr = TesseractOCR(n_threads=1, lang="chi_sim+eng")  # 支持中文和英文
-
-        # 加载图像
-        image = Img(img, detect_rotation=False)
-
-        # 提取表格
-        tables = image.extract_tables(ocr=ocr)
-        if not tables:
-            return jsonify({'error': '图像中没有检测到表格'}), 400
-
-        # 创建临时文件保存Excel文件
-        excel_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', mode='w+b')
-
-        # 将表格转换为数据框并保存为Excel文件
-        with pd.ExcelWriter(excel_temp.name) as writer:
-            for i, table in enumerate(tables):
-                df = table.to_dataframe()
-                df.to_excel(writer, sheet_name=f'Table {i}', index=False)
-
-        # 返回Excel文件
-        excel_temp.seek(0)
-        return send_file(excel_temp.name, as_attachment=True, download_name='converted.xlsx')
-
-    except Exception as e:
-        # 处理异常并记录日志
-        print(f"Error: {str(e)}")
-        return jsonify({'error': '发生错误，请稍后再试'}), 500
-
-    finally:
-        # 删除临时的图像文件
-        os.unlink(image_temp.name)
-        # 检查 excel_temp 是否已创建，如果是，则删除
-        if excel_temp and os.path.exists(excel_temp.name):
-            os.unlink(excel_temp.name)
-
 
 
 if __name__ == '__main__':
