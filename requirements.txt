@@ -1,14 +1,7 @@
 Flask
 img2pdf
-img2table
-opencv_contrib_python
-opencv_python_headless
-openpyxl
-pandas
 pdf2docx
 pdfplumber
 Pillow
 python_pptx
-Requests
 Werkzeug
-gunicorn
