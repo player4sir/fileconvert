@@ -120,5 +120,5 @@ def convert_word_to_pdf():
         if pdf_temp:
             os.unlink(pdf_temp.name)
 
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=5000)
+# if __name__ == '__main__':
+#     app.run(debug=False, host='0.0.0.0', port=5000)
