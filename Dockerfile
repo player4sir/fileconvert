@@ -1,34 +1,32 @@
-# 使用多阶段构建来减小镜像大小
 # 第一阶段：构建阶段
-FROM tiangolo/uwsgi-nginx-flask:python3.8 as builder
+FROM python:3.8-slim-buster as builder
 
 # 设置工作目录
 WORKDIR /app
 
+# 将当前目录内容复制到容器的/app目录下
+COPY . /app
 
-
-# 复制requirements.txt并安装Python依赖
-COPY ./requirements.txt /app/
+# 安装在requirements.txt中列出的Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 第二阶段：运行阶段
-FROM tiangolo/uwsgi-nginx-flask:python3.8
+FROM python:3.8-slim-buster
 
-# 从构建阶段复制已安装的依赖项
-COPY --from=builder /usr/local /usr/local
-COPY --from=builder /app /app
+# 设置工作目录
+WORKDIR /app
 
+# 从构建阶段复制构建产物到运行阶段
+COPY --from=builder /app/requirements.txt /app/requirements.txt
+COPY --from=builder /app/app.py /app/app.py
+COPY --from=builder /app/static /app/static
+COPY --from=builder /app/templates /app/templates
 
+# 安装在requirements.txt中列出的Python依赖
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制应用文件
-COPY . /app
-
-# 暴露端口
+# 暴露容器的5000端口
 EXPOSE 5000
 
-# 设置Flask应用的环境变量
-ENV FLASK_APP=app.py
-
-
-# 使用Gunicorn代替uWSGI启动Flask应用
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
+# 运行Flask应用
+CMD ["python", "app.py"]
