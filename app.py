@@ -35,7 +35,7 @@ async def handle_file_upload(file: UploadFile, allowed_extensions: tuple):
         raise HTTPException(status_code=400, detail=f"文件大小超过限制 {MAX_FILE_SIZE // (1024 * 1024)} MB")
     return contents
 
-def cleanup(*file_paths):
+async def cleanup(*file_paths):
     for path in file_paths:
         try:
             os.unlink(path)
@@ -59,9 +59,13 @@ async def convert_pdf_to_word(pdf: UploadFile = File(...)):
         cv.close()
         
         logger.info(f"完成PDF到Word转换，文件名: {pdf.filename}")
-        return FileResponse(word_temp.name, filename='converted.docx', background=lambda: cleanup(pdf_temp.name, word_temp.name))
+        
+        async def background_cleanup():
+            await cleanup(pdf_temp.name, word_temp.name)
+        
+        return FileResponse(word_temp.name, filename='converted.docx', background=background_cleanup)
     except Exception as e:
-        cleanup(pdf_temp.name, word_temp.name)
+        await cleanup(pdf_temp.name, word_temp.name)
         logger.error(f"PDF到Word转换失败，文件名 {pdf.filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f'转换失败: {str(e)}')
 
@@ -99,9 +103,13 @@ async def convert_images_to_pdf(
             f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))
         
         logger.info(f"完成图片到PDF转换，共 {len(images)} 张图片")
-        return FileResponse(pdf_temp.name, filename='converted.pdf', background=lambda: cleanup(pdf_temp.name, *image_paths))
+        
+        async def background_cleanup():
+            await cleanup(pdf_temp.name, *image_paths)
+        
+        return FileResponse(pdf_temp.name, filename='converted.pdf', background=background_cleanup)
     except Exception as e:
-        cleanup(pdf_temp.name, *image_paths)
+        await cleanup(pdf_temp.name, *image_paths)
         logger.error(f"图片到PDF转换失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f'转换失败: {str(e)}')
 
@@ -119,8 +127,12 @@ async def convert_word_to_pdf(word: UploadFile = File(...)):
         convert(word_temp.name, pdf_temp.name)
         
         logger.info(f"完成Word到PDF转换，文件名: {word.filename}")
-        return FileResponse(pdf_temp.name, filename='converted.pdf', background=lambda: cleanup(word_temp.name, pdf_temp.name))
+        
+        async def background_cleanup():
+            await cleanup(word_temp.name, pdf_temp.name)
+        
+        return FileResponse(pdf_temp.name, filename='converted.pdf', background=background_cleanup)
     except Exception as e:
-        cleanup(word_temp.name, pdf_temp.name)
+        await cleanup(word_temp.name, pdf_temp.name)
         logger.error(f"Word到PDF转换失败，文件名 {word.filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f'转换失败: {str(e)}')
