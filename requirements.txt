@@ -4,4 +4,3 @@ python-multipart
 img2pdf
 pdf2docx
 Werkzeug
-docx2pdf

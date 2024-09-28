@@ -1,7 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import FileResponse
 from pdf2docx import Converter
-from docx2pdf import convert
 import os
 import tempfile
 import img2pdf
@@ -111,28 +110,4 @@ async def convert_images_to_pdf(
     except Exception as e:
         await cleanup(pdf_temp.name, *image_paths)
         logger.error(f"图片到PDF转换失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f'转换失败: {str(e)}')
-
-@app.post('/word_to_pdf')
-async def convert_word_to_pdf(word: UploadFile = File(...)):
-    logger.info(f"开始Word到PDF转换，文件名: {word.filename}")
-    contents = await handle_file_upload(word, ('.doc', '.docx'))
-
-    word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
-    pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-    
-    try:
-        word_temp.write(contents)
-        word_temp.flush()
-        convert(word_temp.name, pdf_temp.name)
-        
-        logger.info(f"完成Word到PDF转换，文件名: {word.filename}")
-        
-        async def background_cleanup():
-            await cleanup(word_temp.name, pdf_temp.name)
-        
-        return FileResponse(pdf_temp.name, filename='converted.pdf', background=background_cleanup)
-    except Exception as e:
-        await cleanup(word_temp.name, pdf_temp.name)
-        logger.error(f"Word到PDF转换失败，文件名 {word.filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=f'转换失败: {str(e)}')
