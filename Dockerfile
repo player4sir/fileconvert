@@ -12,10 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 暴露应用程序运行的端口
-EXPOSE 5000
+EXPOSE 8000
 
 # 设置环境变量
-ENV FLASK_APP=app.py
+ENV PYTHONUNBUFFERED=1
 
 # 运行应用程序
-CMD ["flask", "run", "--host=0.0.0.0"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

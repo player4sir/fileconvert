@@ -1,124 +1,118 @@
-
-from flask import Flask,request, send_file,jsonify
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi.responses import FileResponse
 from pdf2docx import Converter
 from docx2pdf import convert
 import os
 import tempfile
 import img2pdf
+from typing import List
 from werkzeug.utils import secure_filename
+import logging
+from contextlib import contextmanager
 
+app = FastAPI()
 
-app = Flask(__name__)
+# Constants
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
+# Logging configuration
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# pdf转换为word
-@app.route('/pdf_to_word', methods=['POST'])
-def convert_pdf_to_word():
-    # 假设前端通过表单上传了PDF文件
-    pdf_file = request.files['pdf']  
-    # 创建临时文件保存PDF文件
-    pdf_temp = tempfile.NamedTemporaryFile(delete=False)
-    pdf_file.save(pdf_temp.name)
-    word_temp = None
-    cv = None
+@contextmanager
+def temporary_file(suffix=None):
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     try:
-        # 创建临时文件保存Word文档
-        word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx', mode='w+b')       
-        # 使用pdf2docx库转换PDF为Word
-        cv = Converter(pdf_temp.name)
-        cv.convert(word_temp.name, start=0, end=None)    
-        # 返回Word文档
-        word_temp.seek(0)
-        return send_file(word_temp.name, as_attachment=True, download_name='converted.docx')
-    except Exception as e:
-         response_message = str(e)
-         app.logger.error(f"Conversion failed: {response_message}")
-         return jsonify({'error': response_message}), 500
+        yield temp_file
     finally:
-        # 删除临时的PDF和Word文件
-        if cv:
-            cv.close()
-        if pdf_temp:
-            os.unlink(pdf_temp.name)
-        if word_temp:
-            os.unlink(word_temp.name)
+        temp_file.close()
+        os.unlink(temp_file.name)
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+def allowed_file(filename: str) -> bool:
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
-def allowed_file(filename):
-    """检查文件扩展名是否允许"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/image_to_pdf', methods=['POST'])
-def convert_images_to_pdf():
-    # 检查是否有文件被上传
-    if 'images' not in request.files:
-        return "没有文件部分", 400
+async def handle_file_upload(file: UploadFile, allowed_extensions: tuple):
+    if not file:
+        raise HTTPException(status_code=400, detail="No file part")
+    if file.filename == '':
+        raise HTTPException(status_code=400, detail="No selected file")
+    if not file.filename.lower().endswith(allowed_extensions):
+        raise HTTPException(status_code=400, detail=f"File must be one of: {', '.join(allowed_extensions)}")
     
-    files = request.files.getlist('images')
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"File size exceeds the limit of {MAX_FILE_SIZE // (1024 * 1024)} MB")
+    return contents
+
+@app.post('/pdf_to_word')
+async def convert_pdf_to_word(pdf: UploadFile = File(...)):
+    logger.info(f"Starting PDF to Word conversion for file: {pdf.filename}")
+    contents = await handle_file_upload(pdf, ('.pdf',))
+
+    try:
+        with temporary_file(suffix='.pdf') as pdf_temp, temporary_file(suffix='.docx') as word_temp:
+            pdf_temp.write(contents)
+            pdf_temp.flush()
+            cv = Converter(pdf_temp.name)
+            cv.convert(word_temp.name, start=0, end=None)
+            cv.close()
+            logger.info(f"Completed PDF to Word conversion for file: {pdf.filename}")
+            return FileResponse(word_temp.name, filename='converted.docx')
+    except Exception as e:
+        logger.error(f"PDF to Word conversion failed for file {pdf.filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f'Conversion failed: {str(e)}')
+
+@app.post('/image_to_pdf')
+async def convert_images_to_pdf(
+    images: List[UploadFile] = File(...),
+    orientation: str = Form('portrait'),
+    margin: int = Form(8)
+):
+    logger.info(f"Starting Image to PDF conversion for {len(images)} images")
+    total_size = 0
     image_paths = []
     
-    for file in files:
-        if file and allowed_file(file.filename):
-            # 保存图片到临时文件
-            filename = secure_filename(file.filename)
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png', mode='w+b')
-            file.save(temp_file.name)
-            image_paths.append(temp_file.name)
-        else:
-            return "文件类型不允许", 400
-    
     try:
-        # 创建临时文件保存PDF文档
-        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')    
-        # 获取用户设置的页面方向和边距
-        orientation = request.form.get('orientation', 'portrait')  # 默认为纵向
-        margin = int(request.form.get('margin', 8))  # 默认边距为0    
-        # 设置PDF的布局
-        a4inpt = (img2pdf.mm_to_pt(210), img2pdf.mm_to_pt(297))  # A4大小，单位转换为点
-        layout_fun = img2pdf.get_layout_fun(pagesize=a4inpt)       
-        if orientation == 'landscape':
-            # 如果用户选择横向，交换页面尺寸的宽高
-            a4inpt = (a4inpt[1], a4inpt[0])  
-        # 使用img2pdf库将所有图片合并为一个PDF
-        with open(pdf_temp.name, "wb") as f:
-            f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))    
-        # 返回PDF文档
-        pdf_temp.seek(0)
-        return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
-    finally:
-        # 删除临时的图片文件和PDF文件
-        for path in image_paths:
-            os.unlink(path)
-        os.unlink(pdf_temp.name)
+        for file in images:
+            if file and allowed_file(file.filename):
+                contents = await file.read()
+                total_size += len(contents)
+                if total_size > MAX_FILE_SIZE:
+                    raise HTTPException(status_code=400, detail=f"Total file size exceeds the limit of {MAX_FILE_SIZE // (1024 * 1024)} MB")
+                
+                with temporary_file(suffix='.png') as temp_file:
+                    temp_file.write(contents)
+                    temp_file.flush()
+                    image_paths.append(temp_file.name)
+            else:
+                raise HTTPException(status_code=400, detail="File type not allowed")
         
-@app.route('/word_to_pdf', methods=['POST'])
-def convert_word_to_pdf():
-    # Assume the front end uploads a Word file through a form
-    word_file = request.files['word']
-    # Create a temporary file to save the Word file
-    word_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx', mode='w+b')
-    word_file.save(word_temp.name)
-    pdf_temp = None
-    
-    try:
-        # Create a temporary file to save the PDF document
-        pdf_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', mode='w+b')
-        # Use docx2pdf to convert Word to PDF
-        convert(word_temp.name, pdf_temp.name)
-        # Return the PDF document
-        pdf_temp.seek(0)
-        return send_file(pdf_temp.name, as_attachment=True, download_name='converted.pdf')
+        with temporary_file(suffix='.pdf') as pdf_temp:
+            a4inpt = (img2pdf.mm_to_pt(210), img2pdf.mm_to_pt(297))
+            layout_fun = img2pdf.get_layout_fun(pagesize=a4inpt)
+            if orientation == 'landscape':
+                a4inpt = (a4inpt[1], a4inpt[0])
+            with open(pdf_temp.name, "wb") as f:
+                f.write(img2pdf.convert(image_paths, layout_fun=layout_fun))
+            logger.info(f"Completed Image to PDF conversion for {len(images)} images")
+            return FileResponse(pdf_temp.name, filename='converted.pdf')
     except Exception as e:
-        response_message = str(e)
-        app.logger.error(f"Conversion failed: {response_message}")
-        return jsonify({'error': response_message}), 500
-    finally:
-        # Delete the temporary Word and PDF files
-        if word_temp:
-            os.unlink(word_temp.name)
-        if pdf_temp:
-            os.unlink(pdf_temp.name)
+        logger.error(f"Image to PDF conversion failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f'Conversion failed: {str(e)}')
 
-# if __name__ == '__main__':
-#     app.run(debug=False, host='0.0.0.0', port=5000)
+@app.post('/word_to_pdf')
+async def convert_word_to_pdf(word: UploadFile = File(...)):
+    logger.info(f"Starting Word to PDF conversion for file: {word.filename}")
+    contents = await handle_file_upload(word, ('.doc', '.docx'))
+
+    try:
+        with temporary_file(suffix='.docx') as word_temp, temporary_file(suffix='.pdf') as pdf_temp:
+            word_temp.write(contents)
+            word_temp.flush()
+            convert(word_temp.name, pdf_temp.name)
+            logger.info(f"Completed Word to PDF conversion for file: {word.filename}")
+            return FileResponse(pdf_temp.name, filename='converted.pdf')
+    except Exception as e:
+        logger.error(f"Word to PDF conversion failed for file {word.filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f'Conversion failed: {str(e)}')

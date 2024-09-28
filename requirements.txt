@@ -1,4 +1,6 @@
-Flask
+fastapi
+uvicorn
+python-multipart
 img2pdf
 pdf2docx
 Werkzeug
