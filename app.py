@@ -7,7 +7,7 @@ import img2pdf
 from typing import List
 from werkzeug.utils import secure_filename
 import logging
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import io
 
 app = FastAPI()
@@ -89,10 +89,13 @@ async def convert_images_to_pdf(
                 if total_size > MAX_FILE_SIZE:
                     raise HTTPException(status_code=400, detail=f"总文件大小超过限制 {MAX_FILE_SIZE // (1024 * 1024)} MB")
                 
+                logger.info(f"处理文件: {file.filename}, 大小: {len(contents)} bytes")
+                
                 # Try to open the image using PIL to verify it's a valid image
                 try:
                     img = Image.open(io.BytesIO(contents))
                     img.verify()  # Verify that it's a valid image
+                    logger.info(f"成功验证图片: {file.filename}, 格式: {img.format}, 大小: {img.size}")
                     img.close()
                     
                     # If it's a valid image, save it as PNG
@@ -101,9 +104,18 @@ async def convert_images_to_pdf(
                     img.save(temp_image.name, format='PNG')
                     temp_image.flush()
                     image_paths.append(temp_image.name)
+                    logger.info(f"成功保存图片为PNG: {temp_image.name}")
+                except UnidentifiedImageError as img_error:
+                    logger.warning(f"无法识别图片格式 {file.filename}: {str(img_error)}")
+                    # Fallback: try to convert the image directly without verification
+                    temp_image = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                    with open(temp_image.name, 'wb') as f:
+                        f.write(contents)
+                    image_paths.append(temp_image.name)
+                    logger.info(f"已保存未验证的图片: {temp_image.name}")
                 except Exception as img_error:
-                    logger.error(f"无效的图片文件 {file.filename}: {str(img_error)}")
-                    raise HTTPException(status_code=400, detail=f"无效的图片文件: {file.filename}")
+                    logger.error(f"处理图片文件时出错 {file.filename}: {str(img_error)}")
+                    raise HTTPException(status_code=400, detail=f"处理图片文件时出错: {file.filename}")
             else:
                 raise HTTPException(status_code=400, detail="不允许的文件类型")
         
