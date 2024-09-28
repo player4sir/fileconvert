@@ -7,6 +7,8 @@ import img2pdf
 from typing import List
 from werkzeug.utils import secure_filename
 import logging
+from PIL import Image
+import io
 
 app = FastAPI()
 
@@ -87,13 +89,25 @@ async def convert_images_to_pdf(
                 if total_size > MAX_FILE_SIZE:
                     raise HTTPException(status_code=400, detail=f"总文件大小超过限制 {MAX_FILE_SIZE // (1024 * 1024)} MB")
                 
-                temp_image = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                temp_image.write(contents)
-                temp_image.flush()
-                image_paths.append(temp_image.name)
+                # Try to open the image using PIL to verify it's a valid image
+                try:
+                    img = Image.open(io.BytesIO(contents))
+                    img.verify()  # Verify that it's a valid image
+                    img.close()
+                    
+                    # If it's a valid image, save it as PNG
+                    temp_image = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                    img = Image.open(io.BytesIO(contents))
+                    img.save(temp_image.name, format='PNG')
+                    temp_image.flush()
+                    image_paths.append(temp_image.name)
+                except Exception as img_error:
+                    logger.error(f"无效的图片文件 {file.filename}: {str(img_error)}")
+                    raise HTTPException(status_code=400, detail=f"无效的图片文件: {file.filename}")
             else:
                 raise HTTPException(status_code=400, detail="不允许的文件类型")
         
+        # Rest of the function remains the same
         a4inpt = (img2pdf.mm_to_pt(210), img2pdf.mm_to_pt(297))
         layout_fun = img2pdf.get_layout_fun(pagesize=a4inpt)
         if orientation == 'landscape':
